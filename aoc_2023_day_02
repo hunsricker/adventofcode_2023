@@ -1,0 +1,109 @@
+#! java --source 21 --enable-preview
+
+import static java.lang.System.out;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Optional;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.ToIntFunction;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
+
+    private static final Function<String, Stream<String>> READ_FILE_CONTENT_AS_STREAM_OF_STRINGS =
+            (final String fileName) -> {
+                try {
+                    return Files.readString(Path.of(fileName)).lines().parallel();
+                } catch (final IOException e) {
+                    throw new RuntimeException(e);
+                }
+            };
+
+    record Set(int red, int blue, int green) {}
+
+    record Game(int nr, List<Set> sets) {}
+
+    private static final Pattern RED_CUBE_COUNT_PATTERN = Pattern.compile("(\\d+) red");
+    private static final Pattern BLUE_CUBE_COUNT_PATTERN = Pattern.compile("(\\d+) blue");
+    private static final Pattern GREEN_CUBE_COUNT_PATTERN = Pattern.compile("(\\d+) green");
+
+    private static final Function<Pattern, Function<String, Integer>> COUNT_CUBES =
+            cubeCountPattern -> revealed -> {
+                final var matcher = cubeCountPattern.matcher(revealed);
+                return matcher.find() ? Integer.parseInt(matcher.group(1)) : 0;
+            };
+
+    private static final Function<String, Game> CONVERT_STRING_TO_GAME = value -> {
+        final String[] gameParts = value.split(":");
+        final Matcher matcherGameNr = Pattern.compile("^\\D*(\\d+)$").matcher(gameParts[0]);
+        if (!matcherGameNr.find())
+            throw new IllegalArgumentException(
+                    String.format("Given string could not be converted to Game object: %s", gameParts[0]));
+        final List<Set> cubeSets = Optional.ofNullable(gameParts[1])
+                .map(sets -> sets.split(";"))
+                .stream()
+                .flatMap(Stream::of)
+                .map(cubes -> new Set(
+                        COUNT_CUBES.apply(RED_CUBE_COUNT_PATTERN).apply(cubes),
+                        COUNT_CUBES.apply(BLUE_CUBE_COUNT_PATTERN).apply(cubes),
+                        COUNT_CUBES.apply(GREEN_CUBE_COUNT_PATTERN).apply(cubes)))
+                .toList();
+        return new Game(Integer.parseInt(matcherGameNr.group(1)), cubeSets);
+    };
+
+    private static final ToIntFunction<Set> GET_RED_CUBE_COUNT = Set::red;
+    private static final ToIntFunction<Set> GET_BLUE_CUBE_COUNT = Set::blue;
+    private static final ToIntFunction<Set> GET_GREEN_CUBE_COUNT = Set::green;
+
+    /*
+     * Part One specific
+     */
+    private static final BiFunction<ToIntFunction<Set>, Integer, Predicate<Game>> CUBE_COUNT_VALID =
+            (getCubeCount, maxCount) -> game -> game.sets().stream().parallel().mapToInt(getCubeCount).max().orElse(0)
+                    <= maxCount;
+
+    private final static Predicate<Game> RED_CUBES_VALID = game ->
+            CUBE_COUNT_VALID.apply(GET_RED_CUBE_COUNT, 12).test(game);
+
+    private final static Predicate<Game> BLUE_CUBES_VALID = game ->
+            CUBE_COUNT_VALID.apply(GET_BLUE_CUBE_COUNT, 14).test(game);
+
+    private final static Predicate<Game> GREEN_CUBES_VALID = game ->
+            CUBE_COUNT_VALID.apply(GET_GREEN_CUBE_COUNT, 13).test(game);
+
+    /*
+     * Part Two specific
+     */
+    private static final Function<ToIntFunction<Set>, Function<Game, Integer>> FIND_MINIMUM_SET =
+            getter -> game -> game.sets().stream().parallel().mapToInt(getter).max().orElse(0);
+    private static final Function<Game, Set> FIND_MINIMUM_CUBE_SET = game -> new Set(
+            FIND_MINIMUM_SET.apply(GET_RED_CUBE_COUNT).apply(game),
+            FIND_MINIMUM_SET.apply(GET_BLUE_CUBE_COUNT).apply(game),
+            FIND_MINIMUM_SET.apply(GET_GREEN_CUBE_COUNT).apply(game));
+
+    /*
+     * Main
+     */
+    public static void main(final String[] args) {
+        final String inputFIle = "input/day_02.txt";
+        final int sumPartOne = READ_FILE_CONTENT_AS_STREAM_OF_STRINGS
+                .apply(inputFIle)
+                .map(CONVERT_STRING_TO_GAME)
+                .filter(RED_CUBES_VALID.and(BLUE_CUBES_VALID).and(GREEN_CUBES_VALID))
+                .mapToInt(Game::nr)
+                .sum();
+        out.printf("Summe Part 1: %d\n\r", sumPartOne);
+
+        final int sumPartTwo = READ_FILE_CONTENT_AS_STREAM_OF_STRINGS
+                .apply(inputFIle)
+                .map(CONVERT_STRING_TO_GAME)
+                .map(FIND_MINIMUM_CUBE_SET)
+                .mapToInt(set -> set.red() * set.blue() * set.green())
+                .sum();
+        out.printf("Summe Part 2: %d\n\r", sumPartTwo);
+    }

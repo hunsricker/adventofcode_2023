@@ -1,0 +1,67 @@
+#! java --source 21 --enable-preview
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
+
+    private static final Function<String, Stream<String>> READ_FILE_CONTENT_AS_STREAM_OF_STRINGS =
+            (final String fileName) -> {
+                try {
+                    return Files.readString(Path.of(fileName)).lines();
+                } catch (final IOException e) {
+                    throw new RuntimeException(e);
+                }
+            };
+
+    private static final Function<Stream<String>, Stream<String>> CONVERT_LITERAL_DIGITS_TO_NUMERIC_DIGITS = stream -> stream
+            .map(line -> line.replaceAll("zero", "z0o"))
+            .map(line -> line.replaceAll("one", "o1e"))
+            .map(line -> line.replaceAll("two", "t2o"))
+            .map(line -> line.replaceAll("three", "t3e"))
+            .map(line -> line.replaceAll("four", "f4r"))
+            .map(line -> line.replaceAll("five", "f5e"))
+            .map(line -> line.replaceAll("six", "s6x"))
+            .map(line -> line.replaceAll("seven", "s7n"))
+            .map(line -> line.replaceAll("eight", "e8t"))
+            .map(line -> line.replaceAll("nine", "n9e"));
+
+    private static final Pattern FIRST_DIGIT_PATTERN = Pattern.compile("^\\D*(\\d).*$");
+
+    private static final Pattern LAST_DIGIT_PATTERN = Pattern.compile("^.*(\\d)\\D*$");
+
+    private static final Function<Stream<String>, Stream<String>> EXTRACT_AND_CONCAT_FIRST_AND_LAST_DIGIT = stream ->
+            stream.map(
+                    value -> Stream.of(FIRST_DIGIT_PATTERN, LAST_DIGIT_PATTERN)
+                            .map(pattern -> pattern.matcher(value))
+                            .filter(Matcher::matches)
+                            .map(matcher -> matcher.group(1))
+                            .collect(Collectors.joining())
+            );
+
+    private static final Function<Stream<String>, IntStream> PARSE_STRING_VALUES_TO_INTEGER = stream ->
+            stream.mapToInt(Integer::parseInt);
+
+    public static void main(final String[] args) {
+        //part one
+        resolvePart(Function.identity());
+        //part two
+        resolvePart(CONVERT_LITERAL_DIGITS_TO_NUMERIC_DIGITS);
+    }
+
+    private static void resolvePart(
+            final Function<? super Stream<String>, ? extends Stream<String>> mapping
+    ) {
+        READ_FILE_CONTENT_AS_STREAM_OF_STRINGS
+                .andThen(mapping)
+                .andThen(EXTRACT_AND_CONCAT_FIRST_AND_LAST_DIGIT)
+                .andThen(PARSE_STRING_VALUES_TO_INTEGER)
+                .andThen(IntStream::sum)
+                .andThen(sum -> System.out.printf("Sum: %s%n", sum))
+                .apply("input/day_01.txt");
+    }
